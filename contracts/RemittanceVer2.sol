@@ -48,7 +48,7 @@ contract RemittanceVer2 is Pausable, Ownable
         require(msg.value > 0, "Value must be greater > 0");
         require(remittances[_hashedPassword].startDeadline == 0, "Initial Password Already Used");
         require(usedPasswords[_hashedPassword] == false);
-        Remittance memory newRemittance;
+        Remittance storage newRemittance = remittances[_hashedPassword];
 
         newRemittance.exchangeMgr = _exchangeMgr;
         newRemittance.fundSender = msg.sender;
@@ -70,13 +70,13 @@ contract RemittanceVer2 is Pausable, Ownable
 
         bytes32 hashedPassword = keccak256(abi.encodePacked(_fundsReceiverPsw, _exchangeMgrPsw));
 
-
-        require(remittances[hashedPassword].exchangeMgr == msg.sender);
+        //require(remittances[hashedPassword].exchangeMgr == msg.sender);
         require(remittances[hashedPassword].claimedFunds == false);
 
         emit LogFundsTransferToExchangeMgr(msg.sender, remittances[hashedPassword].valueSend);
 
-        (bool success, ) = msg.sender.call.value(remittances[hashedPassword].valueSend)("");
+        // no matter who calls the exchange manager gets the funds
+        (bool success, ) = remittances[hashedPassword].exchangeMgr.call.value(remittances[hashedPassword].valueSend)("");
         require(success, "TRansfer Failed");
         remittances[hashedPassword].claimedFunds = true;
         return true;
