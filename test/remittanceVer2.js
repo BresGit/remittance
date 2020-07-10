@@ -25,9 +25,9 @@ contract("Remittance", accounts =>
     it("should set up password correct as provided by fundSender", async function()
     {
 
-        const hashedPassword = web3.utils.keccak256("12345");
+        const hashedPassword = await remittance.generateHash("134",exchangeMgr);
         const addOnDeadline = 8 * 7 * 24 * 60 * 60;
-        await remittance.fundsToTransfer(hashedPassword,  addOnDeadline, exchangeMgr, { from:fundSender, value:20 });
+        await remittance.fundsToTransfer(hashedPassword,  addOnDeadline, { from:fundSender, value:20 });
 
         const remittanceStruct = await remittance.remittances(hashedPassword);
 
@@ -39,12 +39,13 @@ contract("Remittance", accounts =>
     it("should match fundSender with fundReceiver and exchangeMgr Passwords", async function()
     {
 
-        const hashedPassword = web3.utils.keccak256("134");
+        const hashedPassword = await remittance.generateHash("134",exchangeMgr);
         const addOnDeadline = 8 * 7 * 24 * 60 * 60;
-        await remittance.fundsToTransfer(hashedPassword, addOnDeadline, exchangeMgr, { from:fundSender, value:20 } );
+        await remittance.fundsToTransfer(hashedPassword, addOnDeadline, { from:fundSender, value:20 } );
         const fundReceiverPsw = "1";
         const exchangeMgrPsw ="34";
         const txObj= await remittance.exchange(fundReceiverPsw, exchangeMgrPsw, { from:exchangeMgr } );
+
         assert.strictEqual(txObj.logs.length, 1);
         const logFundsTransferToExchangeMgr = txObj.logs[0];
         assert.strictEqual("LogFundsTransferToExchangeMgr", logFundsTransferToExchangeMgr.event);
@@ -56,10 +57,10 @@ contract("Remittance", accounts =>
      it("should NOT return funds before deadline reached", async function()
      {
 
-         const hashedPassword = web3.utils.keccak256("134");
+         const hashedPassword = await remittance.generateHash("134",exchangeMgr);
          const addOnDeadline = 6 * 7 * 24 * 60 * 60;
          const amount = web3.utils.toWei("1", "ether");
-         const txObj = await remittance.fundsToTransfer(hashedPassword, addOnDeadline, exchangeMgr, { from:fundSender, value:amount });
+         const txObj = await remittance.fundsToTransfer(hashedPassword, addOnDeadline, { from:fundSender, value:amount });
          const etherString = web3.utils.toWei("1", "ether");
          const LogPswAssigned = txObj.logs[0];
          assert.strictEqual(txObj.logs.length, 1);
@@ -75,10 +76,11 @@ contract("Remittance", accounts =>
      it("should return funds to fundSender after deadline", async function()
      {
 
-         const hashedPassword = web3.utils.keccak256("134");
+
+         const hashedPassword = await remittance.generateHash("134",exchangeMgr);
          const addOnDeadline = 10 * 7 * 24 * 60 * 60;
          const amount = web3.utils.toWei("1", "ether");
-         const txObj = await remittance.fundsToTransfer(hashedPassword, addOnDeadline, exchangeMgr, { from:fundSender, value:amount});
+         const txObj = await remittance.fundsToTransfer(hashedPassword, addOnDeadline, { from:fundSender, value:amount});
          const etherString = web3.utils.toWei("1", "ether");
          const LogPswAssigned = txObj.logs[0];
          assert.strictEqual(txObj.logs.length, 1);
@@ -98,13 +100,13 @@ contract("Remittance", accounts =>
      it("should pause and resume the contract", async function()
      {
 
-        const hashedPassword = web3.utils.keccak256("12345");
+         const hashedPassword = await remittance.generateHash("12345",exchangeMgr);
         const addOnDeadline = 8 * 7 * 24 * 60 * 60;
-        await remittance.fundsToTransfer(hashedPassword,  addOnDeadline, exchangeMgr, { from:fundSender, value:20 });
+        await remittance.fundsToTransfer(hashedPassword,  addOnDeadline,  { from:fundSender, value:20 });
         await remittance.pauseContract({ from:owner });
 
         const amount = web3.utils.toWei("1", "ether");
-        await expectRevert(remittance.fundsToTransfer(hashedPassword, addOnDeadline, exchangeMgr, { from:fundSender, value:amount }), "Pausable: paused");
+        await expectRevert(remittance.fundsToTransfer(hashedPassword, addOnDeadline, { from:fundSender, value:amount }), "Pausable: paused");
         await expectRevert(remittance.pauseContract( { from:owner }),"Pausable: paused");
         await expectRevert(remittance.getUnclaimedFunds(hashedPassword, { from:fundSender }), "Pausable: paused");
 
@@ -113,9 +115,10 @@ contract("Remittance", accounts =>
         await expectRevert(remittance.exchange(fundReceiverPsw, exchangeMgrPsw, { from:exchangeMgr } ), "Pausable: paused");
 
         await remittance.resumeContract( { from:owner });
-        await expectRevert(remittance.fundsToTransfer(hashedPassword,  addOnDeadline, exchangeMgr, { from:fundSender, value:20 } ), "Initial Password Already Used") ;
-        const hashedPasswordNext = web3.utils.keccak256("12399");
-        await remittance.fundsToTransfer(hashedPasswordNext, addOnDeadline, exchangeMgr, { from:fundSender, value:amount});
+        await expectRevert(remittance.fundsToTransfer(hashedPassword,  addOnDeadline, { from:fundSender, value:20 } ), "Initial Password Already Used") ;
+        //const hashedPasswordNext = web3.utils.keccak256("12399");
+        const hashedPasswordNext = await remittance.generateHash("12399",exchangeMgr);
+        await remittance.fundsToTransfer(hashedPasswordNext, addOnDeadline,  { from:fundSender, value:amount});
         await remittance.exchange(fundReceiverPsw, exchangeMgrPsw, { from:exchangeMgr } );
 
      })

@@ -13,12 +13,7 @@ contract RemittanceVer2 is Pausable, Ownable
 
     using SafeMath for uint256;
 
-    //address public remittanceOwner;
-    //address public exchangeMgr;
-    //bool isRunning;
-
     struct Remittance {
-        address exchangeMgr;
         address fundSender;
         uint256 startDeadline;
         uint256 addOnDeadline;
@@ -28,7 +23,6 @@ contract RemittanceVer2 is Pausable, Ownable
     }
 
     mapping (bytes32 => Remittance) public remittances;
-    mapping (bytes32 => bool) public usedPasswords;
 
     event LogFundsTransferToExchangeMgr(address sender, uint256 balance);
     event LogPswAssigned(address sender, uint256 value, bytes32 _hashedPassword);
@@ -38,19 +32,16 @@ contract RemittanceVer2 is Pausable, Ownable
     constructor () public
     {
 
-
     }
 
-    function fundsToTransfer(bytes32 _hashedPassword,uint _addOnDeadline, address _exchangeMgr) public payable whenNotPaused
+    function fundsToTransfer(bytes32 _hashedPassword,uint _addOnDeadline) public payable whenNotPaused
     {
-        require(_exchangeMgr != address(0), 'Adress cant be zero');
-        require(msg.sender != _exchangeMgr);
+
         require(msg.value > 0, "Value must be greater > 0");
         require(remittances[_hashedPassword].startDeadline == 0, "Initial Password Already Used");
-        require(usedPasswords[_hashedPassword] == false);
-        Remittance storage newRemittance = remittances[_hashedPassword];
 
-        newRemittance.exchangeMgr = _exchangeMgr;
+        Remittance memory newRemittance;
+
         newRemittance.fundSender = msg.sender;
         newRemittance.startDeadline = now; //now is solidity global variable
         newRemittance.addOnDeadline = _addOnDeadline;
@@ -65,20 +56,17 @@ contract RemittanceVer2 is Pausable, Ownable
     function exchange(string memory _fundsReceiverPsw, string memory _exchangeMgrPsw) public whenNotPaused returns (bool)
     {
 
-        uint funds = (address(this).balance);
-        require(funds > 0);
+        bytes32 hashedPassword = keccak256(abi.encodePacked(_fundsReceiverPsw, _exchangeMgrPsw,msg.sender));
+        require(remittances[hashedPassword].fundSender != msg.sender, "fund sender is exchange mgr ");
+        require(!remittances[hashedPassword].claimedFunds, "funds already claimed");
 
-        bytes32 hashedPassword = keccak256(abi.encodePacked(_fundsReceiverPsw, _exchangeMgrPsw));
-
-        //require(remittances[hashedPassword].exchangeMgr == msg.sender);
-        require(remittances[hashedPassword].claimedFunds == false);
+        remittances[hashedPassword].claimedFunds = true;
 
         emit LogFundsTransferToExchangeMgr(msg.sender, remittances[hashedPassword].valueSend);
 
-        // no matter who calls the exchange manager gets the funds
-        (bool success, ) = remittances[hashedPassword].exchangeMgr.call.value(remittances[hashedPassword].valueSend)("");
+        (bool success, ) = msg.sender.call.value(remittances[hashedPassword].valueSend)("");
         require(success, "TRansfer Failed");
-        remittances[hashedPassword].claimedFunds = true;
+
         return true;
 
     }
@@ -99,13 +87,6 @@ contract RemittanceVer2 is Pausable, Ownable
 
     }
 
-    function addUsedPassword(bytes32 _hashedPassword) public whenNotPaused onlyOwner
-    {
-
-        usedPasswords[_hashedPassword] = true;
-
-    }
-
     function pauseContract() public  onlyOwner returns(bool success)
     {
 
@@ -118,5 +99,14 @@ contract RemittanceVer2 is Pausable, Ownable
 
         _unpause();
         return true;
+    }
+
+    function generateHash(string memory _password,address _exchangeMgr) public view returns(bytes32 )
+    {
+
+        bytes32 hashedPassword = keccak256(abi.encodePacked(_password, _exchangeMgr));
+
+        return hashedPassword;
+
     }
 }
