@@ -15,10 +15,9 @@ contract RemittanceVer2 is Pausable, Ownable
 
     struct Remittance {
         address fundSender;
-        uint256 startDeadline;
+        uint256 transferStart;
         uint256 addOnDeadline;
         uint256 valueSend;
-        bool claimedFunds;
 
     }
 
@@ -38,12 +37,12 @@ contract RemittanceVer2 is Pausable, Ownable
     {
 
         require(msg.value > 0, "Value must be greater > 0");
-        require(remittances[_hashedPassword].startDeadline == 0, "Initial Password Already Used");
+        require(remittances[_hashedPassword].transferStart == 0, "Initial Password Already Used");
 
         Remittance memory newRemittance;
 
         newRemittance.fundSender = msg.sender;
-        newRemittance.startDeadline = now; //now is solidity global variable
+        newRemittance.transferStart = now; //now is solidity global variable
         newRemittance.addOnDeadline = _addOnDeadline;
         newRemittance.valueSend = msg.value;
         remittances[_hashedPassword] = newRemittance;
@@ -56,15 +55,15 @@ contract RemittanceVer2 is Pausable, Ownable
     function exchange(string memory _fundsReceiverPsw, string memory _exchangeMgrPsw) public whenNotPaused returns (bool)
     {
 
-        bytes32 hashedPassword = keccak256(abi.encodePacked(_fundsReceiverPsw, _exchangeMgrPsw,msg.sender));
-        require(remittances[hashedPassword].fundSender != msg.sender, "fund sender is exchange mgr ");
-        require(!remittances[hashedPassword].claimedFunds, "funds already claimed");
+        bytes32 hashedPassword = keccak256(abi.encodePacked(_fundsReceiverPsw, _exchangeMgrPsw,msg.sender,address(this)));
 
-        remittances[hashedPassword].claimedFunds = true;
+        uint256 valueSend = remittances[hashedPassword].valueSend;
+        require(valueSend != 0, "funds already claimed");
+        remittances[hashedPassword].valueSend = 0;
 
-        emit LogFundsTransferToExchangeMgr(msg.sender, remittances[hashedPassword].valueSend);
+        emit LogFundsTransferToExchangeMgr(msg.sender, valueSend);
 
-        (bool success, ) = msg.sender.call.value(remittances[hashedPassword].valueSend)("");
+        (bool success, ) = msg.sender.call.value(valueSend)("");
         require(success, "TRansfer Failed");
 
         return true;
@@ -75,15 +74,16 @@ contract RemittanceVer2 is Pausable, Ownable
     {
 
         require(remittances[_hashedPassword].fundSender == msg.sender, "sender is not Fund Sender");
-        require(now > (remittances[_hashedPassword].startDeadline.add( remittances[_hashedPassword].addOnDeadline)), "Deadline Not Reached To Claim Back the funds");
-
-        require(remittances[_hashedPassword].claimedFunds != true, "Funds Claimed already");
-        remittances[_hashedPassword].claimedFunds = true;
+        require(now > (remittances[_hashedPassword].transferStart.add( remittances[_hashedPassword].addOnDeadline)), "Deadline Not Reached To Claim Back the funds");
 
         uint256 valueSend = remittances[_hashedPassword].valueSend;
+        require(valueSend != 0, "funds already claimed");
+
         emit LogGetFunds(msg.sender, valueSend);
         (bool success, ) = msg.sender.call.value(valueSend)("");
         require(success, "Transfer Failed");
+
+        remittances[_hashedPassword].valueSend = 0;
 
     }
 
@@ -92,6 +92,7 @@ contract RemittanceVer2 is Pausable, Ownable
 
         _pause();
         return true;
+
     }
 
     function resumeContract() public   onlyOwner returns(bool success)
@@ -99,14 +100,13 @@ contract RemittanceVer2 is Pausable, Ownable
 
         _unpause();
         return true;
+
     }
 
     function generateHash(string memory _password,address _exchangeMgr) public view returns(bytes32 )
     {
 
-        bytes32 hashedPassword = keccak256(abi.encodePacked(_password, _exchangeMgr));
-
-        return hashedPassword;
+        return keccak256(abi.encodePacked(_password, _exchangeMgr,address(this)));
 
     }
 }
