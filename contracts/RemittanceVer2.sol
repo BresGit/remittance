@@ -15,15 +15,14 @@ contract RemittanceVer2 is Pausable, Ownable
 
     struct Remittance {
         address fundSender;
-        uint256 transferStart;
-        uint256 addOnDeadline;
+        uint256 deadline;
         uint256 valueSend;
 
     }
 
     mapping (bytes32 => Remittance) public remittances;
 
-    event LogFundsTransferToExchangeMgr(address sender, uint256 balance);
+    event LogFundsTransferToExchangeMgr(address sender, uint256 balance, bytes32 hashedPassword);
     event LogPswAssigned(address sender, uint256 value, bytes32 _hashedPassword);
     event LogWithdraw(address requester, uint256 value);
     event LogGetFunds(address requester, uint256 value);
@@ -37,13 +36,12 @@ contract RemittanceVer2 is Pausable, Ownable
     {
 
         require(msg.value > 0, "Value must be greater > 0");
-        require(remittances[_hashedPassword].transferStart == 0, "Initial Password Already Used");
+        require(remittances[_hashedPassword].deadline == 0, "Initial Password Already Used");
 
         Remittance memory newRemittance;
 
         newRemittance.fundSender = msg.sender;
-        newRemittance.transferStart = now; //now is solidity global variable
-        newRemittance.addOnDeadline = _addOnDeadline;
+        newRemittance.deadline = now.add(_addOnDeadline);
         newRemittance.valueSend = msg.value;
         remittances[_hashedPassword] = newRemittance;
 
@@ -55,13 +53,13 @@ contract RemittanceVer2 is Pausable, Ownable
     function exchange(string memory _fundsReceiverPsw, string memory _exchangeMgrPsw) public whenNotPaused returns (bool)
     {
 
-        bytes32 hashedPassword = keccak256(abi.encodePacked(_fundsReceiverPsw, _exchangeMgrPsw,msg.sender,address(this)));
+        bytes32 hashedPassword = generateHash(string(abi.encodePacked(_fundsReceiverPsw, _exchangeMgrPsw)),msg.sender);
 
         uint256 valueSend = remittances[hashedPassword].valueSend;
         require(valueSend != 0, "funds already claimed");
         remittances[hashedPassword].valueSend = 0;
 
-        emit LogFundsTransferToExchangeMgr(msg.sender, valueSend);
+        emit LogFundsTransferToExchangeMgr(msg.sender, valueSend, hashedPassword);
 
         (bool success, ) = msg.sender.call.value(valueSend)("");
         require(success, "TRansfer Failed");
@@ -74,16 +72,15 @@ contract RemittanceVer2 is Pausable, Ownable
     {
 
         require(remittances[_hashedPassword].fundSender == msg.sender, "sender is not Fund Sender");
-        require(now > (remittances[_hashedPassword].transferStart.add( remittances[_hashedPassword].addOnDeadline)), "Deadline Not Reached To Claim Back the funds");
+        require(now > remittances[_hashedPassword].deadline, "Deadline Not Reached To Claim Back the funds");
 
         uint256 valueSend = remittances[_hashedPassword].valueSend;
         require(valueSend != 0, "funds already claimed");
+        remittances[_hashedPassword].valueSend = 0;
 
         emit LogGetFunds(msg.sender, valueSend);
         (bool success, ) = msg.sender.call.value(valueSend)("");
         require(success, "Transfer Failed");
-
-        remittances[_hashedPassword].valueSend = 0;
 
     }
 
@@ -106,7 +103,7 @@ contract RemittanceVer2 is Pausable, Ownable
     function generateHash(string memory _password,address _exchangeMgr) public view returns(bytes32 )
     {
 
-        return keccak256(abi.encodePacked(_password, _exchangeMgr,address(this)));
+        return keccak256(abi.encodePacked(_password, _exchangeMgr, address(this)));
 
     }
 }

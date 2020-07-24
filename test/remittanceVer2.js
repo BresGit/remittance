@@ -1,7 +1,7 @@
 const Promise = require("bluebird");
 web3.eth = Promise.promisifyAll(web3.eth);
-const {toBN,toWei}=web3.utils;
-const {getBalance}=web3.eth;
+const {toBN,toWei} = web3.utils;
+const {getBalance} = web3.eth;
 const { constants,time,expectRevert } = require('openzeppelin-test-helpers');
 const { shouldFail } = require("openzeppelin-test-helpers");
 const Remittance = artifacts.require("RemittanceVer2");
@@ -18,6 +18,15 @@ contract("Remittance", accounts =>
     let remittance;
     const eightWeeks = 8 * 7 * 24 * 60 * 60;
 
+async function calcTransCost(txObj)
+        {
+            const gasUsed = toBN(txObj.receipt.gasUsed);
+            const transDetails = await web3.eth.getTransaction(txObj.tx);
+            const gasPrice = transDetails.gasPrice;
+
+            return gasUsed.mul(toBN(gasPrice));
+        }
+
     beforeEach(async () =>
     {
 
@@ -30,11 +39,22 @@ contract("Remittance", accounts =>
 
         const hashedPassword = await remittance.generateHash("134" ,exchangeMgr);
 
-        await remittance.fundsToTransfer(hashedPassword,  eightWeeks, { from:fundSender, value:20 });
+        const tx = await remittance.fundsToTransfer(hashedPassword,  eightWeeks, { from:fundSender, value:20 });
+
+        const blockNumber = await tx.receipt.blockNumber;
+        const blockDetail = await web3.eth.getBlock(blockNumber);
+        const now = blockDetail.timestamp;
+        const LogPswAssigned = tx.logs[0];
+
+        assert.strictEqual(tx.logs.length, 1);
+        assert.strictEqual("LogPswAssigned", LogPswAssigned.event);
+        assert.strictEqual(LogPswAssigned.args[0], fundSender, "Sender is not fundSender");
+        assert.strictEqual(LogPswAssigned.args[1].toString(10), "20","Value send is not 20 Wei");
+        assert.strictEqual(LogPswAssigned.args[2],hashedPassword, "Hashed Password does not match");
 
         const remittanceStruct = await remittance.remittances(hashedPassword);
 
-        assert.strictEqual(eightWeeks,(remittanceStruct.addOnDeadline).toNumber(), "addOnDeadline is not setup correctly");
+        assert.strictEqual(eightWeeks + now ,(remittanceStruct.deadline).toNumber(), "deadline is not setup correctly");
         assert.strictEqual(20,(remittanceStruct.valueSend).toNumber(), "valueSend is not setup correctly");
 
     });
@@ -48,7 +68,7 @@ contract("Remittance", accounts =>
 
         const fundReceiverPsw = "1";
         const exchangeMgrPsw ="34";
-        const txObj= await remittance.exchange(fundReceiverPsw, exchangeMgrPsw, { from:exchangeMgr } );
+        const txObj= await remittance.exchange(fundReceiverPsw, exchangeMgrPsw, { from:exchangeMgr } )
 
         assert.strictEqual(txObj.logs.length, 1);
         const logFundsTransferToExchangeMgr = txObj.logs[0];
@@ -62,15 +82,17 @@ contract("Remittance", accounts =>
      {
 
          const hashedPassword = await remittance.generateHash("134", exchangeMgr);
-         const amount = toWei("1", "ether");
+         const amount = toWei("0.001", "ether");
+
          const txObj = await remittance.fundsToTransfer(hashedPassword, eightWeeks, { from:fundSender, value:amount });
-         const etherString = toWei("1", "ether");
+         const etherString = toWei("0.001", "ether");
+
          const LogPswAssigned = txObj.logs[0];
 
          assert.strictEqual(txObj.logs.length, 1);
          assert.strictEqual("LogPswAssigned", LogPswAssigned.event);
          assert.strictEqual(LogPswAssigned.args[0], fundSender, "Sender is not fundSender");
-         assert.strictEqual(LogPswAssigned.args[1].toString(10), etherString,"Value send is not 1 ether");
+         assert.strictEqual(LogPswAssigned.args[1].toString(10), etherString, "Value send is not 0.001 ether");
 
          await time.increase(time.duration.weeks(5));
          await expectRevert(remittance.getUnclaimedFunds(hashedPassword, { from:fundSender }), "Deadline Not Reached To Claim Back the funds");
@@ -80,24 +102,33 @@ contract("Remittance", accounts =>
      it("should return funds to fundSender after deadline", async function()
      {
 
-
          const hashedPassword = await remittance.generateHash("134", exchangeMgr);
-         const amount = toWei("1", "ether");
+         const amount = toWei("0.001", "ether");
          const txObj = await remittance.fundsToTransfer(hashedPassword, eightWeeks, { from:fundSender, value:amount});
-         const etherString = toWei("1", "ether");
+         const etherString = toWei("0.001", "ether");
          const LogPswAssigned = txObj.logs[0];
-         
+
          assert.strictEqual(txObj.logs.length, 1);
          assert.strictEqual("LogPswAssigned", LogPswAssigned.event);
          assert.strictEqual(LogPswAssigned.args[0], fundSender, "Sender is not fundSender");
-         assert.strictEqual(LogPswAssigned.args[1].toString(10), etherString, "Value send is not 1 ether");
+         assert.strictEqual(LogPswAssigned.args[1].toString(10), etherString, "Value send is not 0.001 ether");
 
          await time.increase(time.duration.weeks(12));
+         await expectRevert(remittance.getUnclaimedFunds(hashedPassword, { from:exchangeMgr }),"sender is not Fund Sender");
          let fundSenderBlncBefore = await getBalance(fundSender);
+         const fundSenderBlncBeforeBN  = toBN(fundSenderBlncBefore);
          const txObj2 = await remittance.getUnclaimedFunds(hashedPassword, { from:fundSender });
-         let fundSenderBlncAfter = await getBalance(fundSender);
 
-         expect(new BN(fundSenderBlncBefore)).to.be.lt.BN(fundSenderBlncAfter);
+         let fundSenderBlncAfter = await getBalance(fundSender);
+         const fundSenderBlncAfterBN  = toBN(fundSenderBlncAfter);
+
+         const trCost = await calcTransCost(txObj2);
+         const p2ExpectedBalance  = fundSenderBlncBeforeBN.sub(trCost).add(toBN(amount));
+
+         assert.strictEqual(p2ExpectedBalance.toString(10), fundSenderBlncAfterBN.toString(10),
+        "Expected balance not equal After Withdraw Balance");
+
+        await expectRevert(remittance.exchange("13", "4", { from:exchangeMgr } ),"funds already claimed");
 
      })
 
@@ -109,7 +140,7 @@ contract("Remittance", accounts =>
         await remittance.fundsToTransfer(hashedPassword,  eightWeeks,  { from:fundSender, value:20 });
         await remittance.pauseContract({ from:owner });
 
-        const amount = toWei("1", "ether");
+        const amount = toWei("0.001", "ether");
 
         await expectRevert(remittance.fundsToTransfer(hashedPassword, eightWeeks, { from:fundSender, value:amount }), "Pausable: paused");
         await expectRevert(remittance.pauseContract( { from:owner }), "Pausable: paused");
