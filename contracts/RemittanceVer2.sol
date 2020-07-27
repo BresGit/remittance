@@ -23,7 +23,7 @@ contract RemittanceVer2 is Pausable, Ownable
     mapping (bytes32 => Remittance) public remittances;
 
     event LogFundsTransferToExchangeMgr(address sender, uint256 balance, bytes32 hashedPassword);
-    event LogPswAssigned(address sender, uint256 value, bytes32 _hashedPassword);
+    event LogPswAssigned(address sender, uint256 value, bytes32 _hashedPassword, uint256 deadline);
     event LogWithdraw(address requester, uint256 value);
     event LogGetFunds(address requester, uint256 value);
 
@@ -45,26 +45,28 @@ contract RemittanceVer2 is Pausable, Ownable
         newRemittance.valueSend = msg.value;
         remittances[_hashedPassword] = newRemittance;
 
-        emit LogPswAssigned(msg.sender, msg.value, _hashedPassword);
+        emit LogPswAssigned(msg.sender, msg.value, _hashedPassword, newRemittance.deadline);
 
     }
 
     // exchange is executed after fund receiver  and exchange manager  met and fundeceiver provided his part of PSW, now the funds in ether can be released
-    function exchange(string memory _fundsReceiverPsw, string memory _exchangeMgrPsw) public whenNotPaused returns (bool)
+    function exchange(uint256 _fundsReceiverPsw, uint256 _exchangeMgrPsw) public whenNotPaused returns (bool success)
     {
 
-        bytes32 hashedPassword = generateHash(string(abi.encodePacked(_fundsReceiverPsw, _exchangeMgrPsw)),msg.sender);
-
+        uint256  confirmPassword = _fundsReceiverPsw.add(_exchangeMgrPsw);
+        bytes32 hashedPassword = generateHash(confirmPassword,msg.sender);
         uint256 valueSend = remittances[hashedPassword].valueSend;
+
         require(valueSend != 0, "funds already claimed");
+
         remittances[hashedPassword].valueSend = 0;
+        remittances[hashedPassword].fundSender = address(0);
+        remittances[hashedPassword].deadline =  0;
 
         emit LogFundsTransferToExchangeMgr(msg.sender, valueSend, hashedPassword);
 
         (bool success, ) = msg.sender.call.value(valueSend)("");
-        require(success, "TRansfer Failed");
-
-        return true;
+        require(success, "Transfer Failed");
 
     }
 
@@ -77,6 +79,8 @@ contract RemittanceVer2 is Pausable, Ownable
         uint256 valueSend = remittances[_hashedPassword].valueSend;
         require(valueSend != 0, "funds already claimed");
         remittances[_hashedPassword].valueSend = 0;
+        remittances[_hashedPassword].fundSender = address(0);
+        remittances[_hashedPassword].deadline =  0;
 
         emit LogGetFunds(msg.sender, valueSend);
         (bool success, ) = msg.sender.call.value(valueSend)("");
@@ -100,7 +104,7 @@ contract RemittanceVer2 is Pausable, Ownable
 
     }
 
-    function generateHash(string memory _password,address _exchangeMgr) public view returns(bytes32 )
+    function generateHash(uint256 _password,address _exchangeMgr) public view returns(bytes32)
     {
 
         return keccak256(abi.encodePacked(_password, _exchangeMgr, address(this)));

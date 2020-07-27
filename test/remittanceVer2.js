@@ -27,7 +27,7 @@ async function calcTransCost(txObj)
             return gasUsed.mul(toBN(gasPrice));
         }
 
-    beforeEach(async () =>
+    beforeEach("Deploying Remittance", async () =>
     {
 
         remittance = await Remittance.new();
@@ -37,16 +37,16 @@ async function calcTransCost(txObj)
     it("should set up password correct as provided by fundSender", async function()
     {
 
-        const hashedPassword = await remittance.generateHash("134" ,exchangeMgr);
+        const hashedPassword = await remittance.generateHash(134 ,exchangeMgr);
 
         const tx = await remittance.fundsToTransfer(hashedPassword,  eightWeeks, { from:fundSender, value:20 });
 
         const blockNumber = await tx.receipt.blockNumber;
         const blockDetail = await web3.eth.getBlock(blockNumber);
         const now = blockDetail.timestamp;
+        assert.strictEqual(tx.logs.length, 1);
         const LogPswAssigned = tx.logs[0];
 
-        assert.strictEqual(tx.logs.length, 1);
         assert.strictEqual("LogPswAssigned", LogPswAssigned.event);
         assert.strictEqual(LogPswAssigned.args[0], fundSender, "Sender is not fundSender");
         assert.strictEqual(LogPswAssigned.args[1].toString(10), "20","Value send is not 20 Wei");
@@ -62,12 +62,12 @@ async function calcTransCost(txObj)
     it("should match fundSender with fundReceiver and exchangeMgr Passwords", async function()
     {
 
-        const hashedPassword = await remittance.generateHash("134" ,exchangeMgr);
+        const hashedPassword = await remittance.generateHash(46 ,exchangeMgr);
 
         await remittance.fundsToTransfer(hashedPassword, eightWeeks, { from:fundSender, value:20 } );
 
-        const fundReceiverPsw = "1";
-        const exchangeMgrPsw ="34";
+        const fundReceiverPsw = 12;
+        const exchangeMgrPsw =34;
         const txObj= await remittance.exchange(fundReceiverPsw, exchangeMgrPsw, { from:exchangeMgr } )
 
         assert.strictEqual(txObj.logs.length, 1);
@@ -81,7 +81,7 @@ async function calcTransCost(txObj)
      it("should NOT return funds before deadline reached", async function()
      {
 
-         const hashedPassword = await remittance.generateHash("134", exchangeMgr);
+         const hashedPassword = await remittance.generateHash(134, exchangeMgr);
          const amount = toWei("0.001", "ether");
 
          const txObj = await remittance.fundsToTransfer(hashedPassword, eightWeeks, { from:fundSender, value:amount });
@@ -94,6 +94,10 @@ async function calcTransCost(txObj)
          assert.strictEqual(LogPswAssigned.args[0], fundSender, "Sender is not fundSender");
          assert.strictEqual(LogPswAssigned.args[1].toString(10), etherString, "Value send is not 0.001 ether");
 
+         const remittanceStruct = await remittance.remittances(hashedPassword);
+
+         assert.strictEqual(LogPswAssigned.args[3].toString(10), remittanceStruct.deadline.toString(10), "Deadline not equal");
+
          await time.increase(time.duration.weeks(5));
          await expectRevert(remittance.getUnclaimedFunds(hashedPassword, { from:fundSender }), "Deadline Not Reached To Claim Back the funds");
 
@@ -102,7 +106,7 @@ async function calcTransCost(txObj)
      it("should return funds to fundSender after deadline", async function()
      {
 
-         const hashedPassword = await remittance.generateHash("134", exchangeMgr);
+         const hashedPassword = await remittance.generateHash(134, exchangeMgr);
          const amount = toWei("0.001", "ether");
          const txObj = await remittance.fundsToTransfer(hashedPassword, eightWeeks, { from:fundSender, value:amount});
          const etherString = toWei("0.001", "ether");
@@ -128,14 +132,14 @@ async function calcTransCost(txObj)
          assert.strictEqual(p2ExpectedBalance.toString(10), fundSenderBlncAfterBN.toString(10),
         "Expected balance not equal After Withdraw Balance");
 
-        await expectRevert(remittance.exchange("13", "4", { from:exchangeMgr } ),"funds already claimed");
+        await expectRevert(remittance.exchange(100, 34, { from:exchangeMgr } ) ,"funds already claimed");
 
      })
 
      it("should pause and resume the contract", async function()
      {
 
-     const hashedPassword = await remittance.generateHash("12345", exchangeMgr);
+     const hashedPassword = await remittance.generateHash(123, exchangeMgr);
 
         await remittance.fundsToTransfer(hashedPassword,  eightWeeks,  { from:fundSender, value:20 });
         await remittance.pauseContract({ from:owner });
@@ -146,8 +150,8 @@ async function calcTransCost(txObj)
         await expectRevert(remittance.pauseContract( { from:owner }), "Pausable: paused");
         await expectRevert(remittance.getUnclaimedFunds(hashedPassword, { from:fundSender }), "Pausable: paused");
 
-        const fundReceiverPsw = "12";
-        const exchangeMgrPsw = "345";
+        const fundReceiverPsw = 23;
+        const exchangeMgrPsw = 100;
         await expectRevert(remittance.exchange(fundReceiverPsw, exchangeMgrPsw, { from:exchangeMgr } ), "Pausable: paused");
 
         await remittance.resumeContract( { from:owner });
