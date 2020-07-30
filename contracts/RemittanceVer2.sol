@@ -23,7 +23,7 @@ contract RemittanceVer2 is Pausable, Ownable
     mapping (bytes32 => Remittance) public remittances;
 
     event LogFundsTransferToExchangeMgr(address sender, uint256 balance, bytes32 hashedPassword);
-    event LogPswAssigned(address sender, uint256 value, bytes32 _hashedPassword, uint256 deadline);
+    event LogPswAssigned(address sender, uint256 value, bytes32 _hashedPassword);
     event LogWithdraw(address requester, uint256 value);
     event LogGetFunds(address requester, uint256 value);
 
@@ -32,7 +32,7 @@ contract RemittanceVer2 is Pausable, Ownable
 
     }
 
-    function fundsToTransfer(bytes32 _hashedPassword,uint _addOnDeadline) public payable whenNotPaused
+    function fundsToTransfer(bytes32 _hashedPassword,uint _addOnDeadline) public payable whenNotPaused returns (bool success)
     {
 
         require(msg.value > 0, "Value must be greater > 0");
@@ -45,32 +45,33 @@ contract RemittanceVer2 is Pausable, Ownable
         newRemittance.valueSend = msg.value;
         remittances[_hashedPassword] = newRemittance;
 
-        emit LogPswAssigned(msg.sender, msg.value, _hashedPassword, newRemittance.deadline);
+        emit LogPswAssigned(msg.sender, msg.value, _hashedPassword);
+
+        return true;
 
     }
 
     // exchange is executed after fund receiver  and exchange manager  met and fundeceiver provided his part of PSW, now the funds in ether can be released
-    function exchange(uint256 _fundsReceiverPsw, uint256 _exchangeMgrPsw) public whenNotPaused returns (bool success)
+    function exchange(uint256 _fundsReceiverPsw) public whenNotPaused returns (bool success)
     {
 
-        uint256  confirmPassword = _fundsReceiverPsw.add(_exchangeMgrPsw);
-        bytes32 hashedPassword = generateHash(confirmPassword,msg.sender);
+        bytes32 hashedPassword = generateHash(_fundsReceiverPsw,msg.sender);
         uint256 valueSend = remittances[hashedPassword].valueSend;
 
         require(valueSend != 0, "funds already claimed");
 
         remittances[hashedPassword].valueSend = 0;
         remittances[hashedPassword].fundSender = address(0);
-        remittances[hashedPassword].deadline =  0;
 
         emit LogFundsTransferToExchangeMgr(msg.sender, valueSend, hashedPassword);
 
         (bool success, ) = msg.sender.call.value(valueSend)("");
         require(success, "Transfer Failed");
 
+        return true;
     }
 
-    function getUnclaimedFunds(bytes32 _hashedPassword) public whenNotPaused
+    function getUnclaimedFunds(bytes32 _hashedPassword) public whenNotPaused returns (bool success)
     {
 
         require(remittances[_hashedPassword].fundSender == msg.sender, "sender is not Fund Sender");
@@ -80,11 +81,12 @@ contract RemittanceVer2 is Pausable, Ownable
         require(valueSend != 0, "funds already claimed");
         remittances[_hashedPassword].valueSend = 0;
         remittances[_hashedPassword].fundSender = address(0);
-        remittances[_hashedPassword].deadline =  0;
 
         emit LogGetFunds(msg.sender, valueSend);
         (bool success, ) = msg.sender.call.value(valueSend)("");
         require(success, "Transfer Failed");
+
+        return true;
 
     }
 
