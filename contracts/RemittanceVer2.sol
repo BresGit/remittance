@@ -23,9 +23,8 @@ contract RemittanceVer2 is Pausable, Ownable
     mapping (bytes32 => Remittance) public remittances;
 
     event LogFundsTransferToExchangeMgr(address sender, uint256 balance, bytes32 hashedPassword);
-    event LogPswAssigned(address sender, uint256 value, bytes32 _hashedPassword);
-    event LogWithdraw(address requester, uint256 value);
-    event LogGetFunds(address requester, uint256 value);
+    event LogPswAssigned(address sender, uint256 value, bytes32 _hashedPassword, uint256 deadline);
+    event LogGetFunds(address requester, uint256 value, bytes32 _hashedPassword);
 
     constructor () public
     {
@@ -45,7 +44,7 @@ contract RemittanceVer2 is Pausable, Ownable
         newRemittance.valueSend = msg.value;
         remittances[_hashedPassword] = newRemittance;
 
-        emit LogPswAssigned(msg.sender, msg.value, _hashedPassword);
+        emit LogPswAssigned(msg.sender, msg.value, _hashedPassword, newRemittance.deadline);
 
         return true;
 
@@ -82,7 +81,7 @@ contract RemittanceVer2 is Pausable, Ownable
         remittances[_hashedPassword].valueSend = 0;
         remittances[_hashedPassword].fundSender = address(0);
 
-        emit LogGetFunds(msg.sender, valueSend);
+        emit LogGetFunds(msg.sender, valueSend, _hashedPassword);
         (bool success, ) = msg.sender.call.value(valueSend)("");
         require(success, "Transfer Failed");
 

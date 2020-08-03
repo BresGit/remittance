@@ -100,6 +100,8 @@ async function calcTransCost(txObj)
 
          const remittanceStruct = await remittance.remittances(hashedPassword);
 
+         assert.strictEqual(LogPswAssigned.args[3].toString(10), remittanceStruct.deadline.toString(10), "Deadline not equal");
+
          await time.increase(time.duration.weeks(5));
          await expectRevert(remittance.getUnclaimedFunds(hashedPassword, { from:fundSender }), "Deadline Not Reached To Claim Back the funds");
 
