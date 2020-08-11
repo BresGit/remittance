@@ -23,8 +23,8 @@ contract RemittanceVer2 is Pausable, Ownable
     mapping (bytes32 => Remittance) public remittances;
 
     event LogFundsTransferToExchangeMgr(address sender, uint256 balance, bytes32 hashedPassword);
-    event LogPswAssigned(address sender, uint256 value, bytes32 _hashedPassword, uint256 deadline);
-    event LogGetFunds(address requester, uint256 value, bytes32 _hashedPassword);
+    event LogPswAssigned(address sender, uint256 value, bytes32 hashedPassword, uint256 deadline);
+    event LogGetFunds(address requester, uint256 value, bytes32 hashedPassword);
 
     constructor () public
     {
