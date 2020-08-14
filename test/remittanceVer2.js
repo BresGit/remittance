@@ -20,7 +20,7 @@ contract("Remittance", accounts =>
 
     async function calcTransCost(txObj)
         {
-            
+
         const gasUsed = toBN(txObj.receipt.gasUsed);
         const transDetails = await web3.eth.getTransaction(txObj.tx);
         const gasPrice = transDetails.gasPrice;
@@ -40,7 +40,6 @@ contract("Remittance", accounts =>
     {
 
         const hashedPassword = await remittance.generateHash(134 ,exchangeMgr);
-
         const tx = await remittance.fundsToTransfer(hashedPassword, eightWeeks, { from:fundSender, value:20 });
 
         await expectRevert(remittance.fundsToTransfer(hashedPassword,  eightWeeks, { from:fundSender, value:20 }), "Initial Password Already Used");
@@ -72,15 +71,10 @@ contract("Remittance", accounts =>
         await remittance.fundsToTransfer(hashedPassword, eightWeeks, { from:fundSender, value:amount} );
 
         const fundReceiverPsw = 1234;
-
-        let exchangeMgrBlncBefore = await getBalance(exchangeMgr);
-
-        exchangeMgrBlncBeforeBN = toBN(exchangeMgrBlncBefore);
+        const exchangeMgrBlncBeforeBN = toBN(await getBalance(exchangeMgr));
         const txObj= await remittance.exchange(fundReceiverPsw, { from:exchangeMgr } );
         const trCost = await calcTransCost(txObj);
-
-        let exchangeMgrBlncAfter = await getBalance(exchangeMgr);
-
+        const exchangeMgrBlncAfter = await getBalance(exchangeMgr);
         const expectedBalance  = exchangeMgrBlncBeforeBN.sub(trCost).add(toBN(amount));
 
         assert.strictEqual(expectedBalance.toString(10),exchangeMgrBlncAfter,"Final Balance not Equal");
@@ -137,13 +131,10 @@ contract("Remittance", accounts =>
          await time.increase(time.duration.weeks(12));
          await expectRevert(remittance.getUnclaimedFunds(hashedPassword, { from:exchangeMgr }), "sender is not Fund Sender");
 
-         let fundSenderBlncBefore = await getBalance(fundSender);
-         const fundSenderBlncBeforeBN  = toBN(fundSenderBlncBefore);
+         const fundSenderBlncBeforeBN = toBN(await getBalance(fundSender));
          const txObj2 = await remittance.getUnclaimedFunds(hashedPassword, { from:fundSender });
-
-         let fundSenderBlncAfter = await getBalance(fundSender);
+         const fundSenderBlncAfter = await getBalance(fundSender);
          const fundSenderBlncAfterBN  = toBN(fundSenderBlncAfter);
-
          const trCost = await calcTransCost(txObj2);
          const p2ExpectedBalance  = fundSenderBlncBeforeBN.sub(trCost).add(toBN(amount));
 
