@@ -42,6 +42,7 @@ contract("Remittance", accounts =>
         const hashedPassword = await remittance.generateHash(134 ,exchangeMgr);
         const tx = await remittance.fundsToTransfer(hashedPassword, eightWeeks, { from:fundSender, value:20 });
 
+
         await expectRevert(remittance.fundsToTransfer(hashedPassword,  eightWeeks, { from:fundSender, value:20 }), "Initial Password Already Used");
 
         const blockNumber = tx.receipt.blockNumber;
@@ -133,15 +134,14 @@ contract("Remittance", accounts =>
 
          const fundSenderBlncBeforeBN = toBN(await getBalance(fundSender));
          const txObj2 = await remittance.getUnclaimedFunds(hashedPassword, { from:fundSender });
-         const fundSenderBlncAfter = await getBalance(fundSender);
-         const fundSenderBlncAfterBN  = toBN(fundSenderBlncAfter);
+         const fundSenderBlncAfterBN = toBN(await getBalance(fundSender));
          const trCost = await calcTransCost(txObj2);
          const p2ExpectedBalance  = fundSenderBlncBeforeBN.sub(trCost).add(toBN(amount));
 
          assert.strictEqual(p2ExpectedBalance.toString(10), fundSenderBlncAfterBN.toString(10),
-        "Expected balance not equal After Withdraw Balance");
+         "Expected balance not equal After Withdraw Balance");
 
-        await expectRevert(remittance.exchange(134, { from:exchangeMgr } ) ,"funds already claimed");
+         await expectRevert(remittance.exchange(134, { from:exchangeMgr } ) ,"funds already claimed");
 
      })
 
